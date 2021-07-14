@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    component: fluentd
+  name: fluentd
+spec:
+  ports:
+    - port: 24224
+      name: forward-protocol
+      protocol: TCP
+      targetPort: 24224
+  selector:
+    component: fluentd
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fluentd
+  labels:
+    component: fluentd
+spec:
+  selector:
+    matchLabels:
+      component: fluentd
+  template:
+    metadata:
+      labels:
+        component: fluentd
+    spec:
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+      containers:
+        - name: splunk-fluentd-k8s-logs
+          image: splunk/fluentd-hec:1.0.1
+          imagePullPolicy: Always
+          args:
+            - "-c"
+            - "/fluentd/etc/fluent.conf"
+          env:
+            - name: SPLUNK_HEC_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MY_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: MY_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: SPLUNK_HEC_TOKEN
+              value: "f6c89b13-0846-4054-b3e7-2a9e5a3b9e2a"
+            - name: FLUENT_SPLUNK_HEC_HOST
+              value: "192.168.1.4"
+            - name: FLUENT_SPLUNK_HEC_PORT
+              value: "8088"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 200Mi
+          volumeMounts:
+            - name: varlog
+              mountPath: "/var/log"
+            - name: varlibdockercontainers
+              mountPath: "/var/lib/docker/containers"
+              readOnly: true
+            - name: journallogpath
+              mountPath: "/run/log/journal"
+              readOnly: true
+            - name: conf-configmap
+              mountPath: "/fluentd/etc"
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: varlog
+          hostPath:
+            path: "/var/log"
+        - name: varlibdockercontainers
+          hostPath:
+            path: "/var/lib/docker/containers"
+        - name: journallogpath
+          hostPath:
+            path: "/run/log/journal"
+        - name: conf-configmap
+          configMap:
+            name: splunk-kubernetes-logging
+        - name: secrets
+          secret:
+            secretName: splunk-kubernetes-logging

@@ -1,0 +1,49 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: splunk-kubernetes-logging
+  labels:
+    app: splunk-kubernetes-logging
+    version: 1.0.0
+data:
+  fluent.conf: |-
+    @include system.conf
+    @include source.conf
+    @include output.conf
+  system.conf: |-
+    # system wide configurations
+    <system>
+      log_level info
+      root_dir /tmp/fluentd
+    </system>
+  source.conf: |-
+    <source>
+      @type forward
+      @label @SPLUNK
+      port 24224
+      bind 0.0.0.0
+    </source>
+  output.conf: |-
+    <label @SPLUNK>
+      <match **>
+        @type splunk_hec
+        protocol https
+        hec_host "#{ENV['FLUENT_SPLUNK_HEC_HOST']}"
+        hec_port "#{ENV['FLUENT_SPLUNK_HEC_PORT']}"
+        hec_token "#{ENV['SPLUNK_HEC_TOKEN']}"
+        host "#{ENV['SPLUNK_HEC_HOST']}"
+        source_key source
+        sourcetype_key sourcetype
+        insecure_ssl true
+        keepalive true
+        <buffer>
+          @type memory
+          chunk_limit_records 100000
+          flush_interval 5s
+          flush_thread_count 1
+          overflow_action block
+          retry_max_times 3
+        </buffer>
+      </match>
+    </label>
